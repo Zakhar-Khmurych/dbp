@@ -35,18 +35,18 @@ def read_uncommited_demo():
     """
     connection1 = create_connection()
     connection2 = create_connection()
-
+    print("\n read uncommitted")
     try:
         cursor1 = connection1.cursor()
         cursor2 = connection2.cursor()
 
         # Транзакція 1: Читання непідтверджених
-        print(f"Transaction 1 started: {datetime.now()}")
+        print(f"Transaction 1 started: {datetime.now()} ")
         connection1.start_transaction(isolation_level='READ UNCOMMITTED')
         cursor1.execute("UPDATE accounts SET balance = 9999 WHERE name = 'Alice'")
 
         # Транзакція 2: Читання непідтверджених
-        print(f"Transaction 2 started: {datetime.now()}")
+        print(f"Transaction 2 started: {datetime.now()} ")
         connection2.start_transaction(isolation_level='READ UNCOMMITTED')
         cursor2.execute("SELECT balance FROM accounts WHERE name = 'Alice'")
         balance_dirty_read = cursor2.fetchone()[0]
@@ -79,6 +79,7 @@ def read_committed_demo():
     """
     connection1 = create_connection()
     connection2 = create_connection()
+    print("\n read committed")
 
     try:
         cursor1 = connection1.cursor()
@@ -88,11 +89,11 @@ def read_committed_demo():
         print(f"Transaction 1 started: {datetime.now()}")
         connection1.start_transaction(isolation_level='READ COMMITTED')
         cursor1.execute("UPDATE accounts SET balance = 9999 WHERE name = 'Alice'")
-        cursor1.execute("UPDATE accounts SET balance = 666 WHERE name = 'Alice'")
 
         # Транзакція 2: READ COMMITTED
         print(f"Transaction 2 started: {datetime.now()}")
         connection2.start_transaction(isolation_level='READ COMMITTED')
+        cursor2.execute("UPDATE accounts SET balance = 666 WHERE name = 'Alice'")
         cursor2.execute("SELECT balance FROM accounts WHERE name = 'Alice'")
         balance_read_committed = cursor2.fetchone()[0]
 
@@ -124,6 +125,7 @@ def read_repeatable_demo():
     """
     connection1 = create_connection()
     connection2 = create_connection()
+    print("\n read repeatable")
 
     try:
         cursor1 = connection1.cursor()
@@ -137,6 +139,7 @@ def read_repeatable_demo():
         # Транзакція 2: REPEATABLE READ
         print(f"Transaction 2 started: {datetime.now()}")
         connection2.start_transaction(isolation_level='REPEATABLE READ')
+        cursor2.execute("UPDATE accounts SET balance = 666 WHERE name = 'Bob'")
         cursor2.execute("SELECT balance FROM accounts WHERE name = 'Alice'")
         balance_repeatable_read = cursor2.fetchone()[0]
 
@@ -160,10 +163,59 @@ def read_repeatable_demo():
         if connection2 and connection2.is_connected():
             connection2.close()
 
+def serializable_demo():
+    """
+    Показує, як працює рівень ізоляції SERIALIZABLE.
+    Демонструє серіалізовані транзакції.
+    """
+    print("\n read serializable")
+    connection1 = create_connection()
+    connection2 = create_connection()
+
+    try:
+        cursor1 = connection1.cursor()
+        cursor2 = connection2.cursor()
+
+        # Транзакція 1: SERIALIZABLE
+        print(f"Transaction 1 started: {datetime.now()}")
+        connection1.start_transaction(isolation_level='SERIALIZABLE')
+        cursor1.execute("SELECT balance FROM accounts WHERE name = 'Alice'")
+        balance_serializable_1 = cursor1.fetchone()[0]
+        print(f"     Initial Read (SERIALIZABLE): Alice's balance = {balance_serializable_1}")
+
+        # Транзакція 2: SERIALIZABLE
+        print(f"Transaction 2 started: {datetime.now()}")
+        connection2.start_transaction(isolation_level='SERIALIZABLE')
+        cursor2.execute("UPDATE accounts SET balance = 666 WHERE name = 'Bob'")
+        cursor2.execute("UPDATE accounts SET balance = 9999 WHERE name = 'Alice'")
+
+        try:
+            connection2.commit()
+        except Error as e:
+            print(f"Error committing transaction 2: {e}")
+
+        # Транзакція 1: Повторне читання
+        cursor1.execute("SELECT balance FROM accounts WHERE name = 'Alice'")
+        balance_serializable_2 = cursor1.fetchone()[0]
+
+        print(f"     Serializable: Alice's balance after update = {balance_serializable_2}")
+
+        connection1.commit()
+
+    except Error as e:
+        print(f"Error: {e}")
+    finally:
+        if cursor1:
+            cursor1.close()
+        if connection1 and connection1.is_connected():
+            connection1.close()
+        if cursor2:
+            cursor2.close()
+        if connection2 and connection2.is_connected():
+            connection2.close()
+
 if __name__ == "__main__":
-    print("\n read repeatable")
+    serializable_demo()
     read_repeatable_demo()
-    print("\n read committed")
     read_committed_demo()
-    print("\n read uncommitted")
     read_uncommited_demo()
